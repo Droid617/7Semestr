@@ -15,8 +15,8 @@ int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_
     __m128i xmm_max_index = _mm_setzero_si128();//zeroing
 
     for (int i = 0; i < arr_size; i += 4) {
-        __m128 xmm_values = _mm_load_ps(&arr[i]);
-        __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);//loading 4 integers
+        __m128 xmm_values = _mm_load_ps(&arr[i]);//shift by one elem every loop
+        __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);//loading 4 integers/indexes
 
         //compare 2 registers like if first[i] < second[i] then result[i] = 1 else 0 -> result casting to __m128i
         __m128i xmm_mask = _mm_castps_si128(_mm_cmpgt_ps(xmm_values, xmm_max_value));
