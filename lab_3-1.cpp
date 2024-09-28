@@ -3,51 +3,89 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <limits>
 #include <immintrin.h>
 
-int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_index, int arr_size) {
+int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_index, int arr_size) 
+{
+    // adding min value of float type to the end of arr
+    int rest = arr.size() % 4;
+    if (rest != 0)
+    {
+        for (int i = 0; i < 4 - rest; ++i)
+        {
+            arr.push_back(std::numeric_limits<float>::min());
+        }
+    }
+
     // variable initialization
     max_value = arr[0];
     max_index = 0;
 
-    // finding max value and its index
-    __m128 xmm_max_value = _mm_load_ps(&arr[0]);//load first 4 elems from arr
-    __m128i xmm_max_index = _mm_setzero_si128();//zeroing
+    __m128 xmm_max_value = _mm_load_ps(&arr[0]);// load first 4 floats from arr
+    __m128i xmm_max_index = _mm_setzero_si128();// telling that max index is 0
 
-    for (int i = 0; i < arr_size; i += 4) {
-        __m128 xmm_values = _mm_load_ps(&arr[i]);//shift by one elem every loop
-        __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);//loading 4 integers/indexes
+    for (int i = 4; i < arr_size; i += 4) 
+    {
+        __m128 xmm_values = _mm_load_ps(&arr[i]);//load next 4 elements
+        __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);// loading 4 indexes
 
-        //compare 2 registers like if first[i] < second[i] then result[i] = 1 else 0 -> result casting to __m128i
+        /* make mask comparing by every of four elements
+         compare 2 registers like if first[i] < second[i] then result[i] = 1 else 0 in bits
+         -> result casting to __m128i */
         __m128i xmm_mask = _mm_castps_si128(_mm_cmpgt_ps(xmm_values, xmm_max_value));
-        //from 2 registers getting new like new_register[i]=max(first[i], second[i])
+
+        // from 2 registers getting new like new_register[i]=max(first[i], second[i])
         xmm_max_value = _mm_max_ps(xmm_values, xmm_max_value);
-        //from 2 registers getting new like new_register[i]=(xmm_mask == 0) ? first[i] : second[i]
+        // from 2 registers getting new like new_register[i]=(xmm_mask == 0) ? first[i] : second[i]
         xmm_max_index = _mm_blendv_epi8(xmm_max_index, xmm_indices, xmm_mask);
     }
 
-    // getting max value and its index
-    float values[4];
-    int indices[4];
+    // compare 0-1 and 2-3
+    __m128 max1 = _mm_max_ps(xmm_max_value, _mm_shuffle_ps(xmm_max_value, xmm_max_value, _MM_SHUFFLE(2, 3, 0, 1)));
+    // compare max values from the previous comparing
+    __m128 max2 = _mm_max_ps(max1, _mm_shuffle_ps(max1, max1, _MM_SHUFFLE(1, 0, 3, 2))); 
 
-    _mm_store_ps(values, xmm_max_value);//loading from register to array
-    _mm_store_si128(reinterpret_cast<__m128i*>(indices), xmm_max_index);//the same but indexes
+    // getting max value
+    _mm_store_ss(&max_value, max2);
 
-    // searching max value and its index from previous result
-    for (int i = 0; i < 4; i++) {
-        if (values[i] > max_value) {
-            max_value = values[i];
-            max_index = indices[i];
+    // getting index of max value from xmm_max_index
+    __m128 maxMask = _mm_cmpeq_ps(max1, _mm_set1_ps(max_value)); // max1 mask
+    int indexMask = _mm_movemask_ps(maxMask); // retrieving mask
+    int index = -1;
+
+    if (indexMask) {
+        // max value in max1
+        int idx = _tzcnt_u32(indexMask); // first bit
+        index = idx; // (0 and 1 indexes)
+    }
+    else {
+        // max value in max2
+        maxMask = _mm_cmpeq_ps(max2, _mm_set1_ps(max_value)); // max2 mask
+        indexMask = _mm_movemask_ps(maxMask); // retrieving mask
+
+        if (indexMask) {
+            int idx = _tzcnt_u32(indexMask); // second bit
+            index = idx + 2; // because it is second bit (2 and 3 indexes)
         }
     }
+
+    // now getting index of max elem; this index in xmm_max_index
+    // loading all indexes from __m128i
+    int32_t indicesArray[4];
+    _mm_storeu_si128((__m128i*)indicesArray, xmm_max_index); // saving indexes in indicesArray
+
+    // getting index from that saved array
+    max_index = indicesArray[index];
 
     return 0;
 }
 
-int main() {
+int main() 
+{
     /*TODO: this code does not read file in vs2022, but open file correctly at another places*/
 
-    //const char* array_file = "input_one_array.txt";
+    // const char* array_file = "input_one_array.txt";
     float max_value = 0;
     int max_index = 0;
     int array_size = 100;//to zero
