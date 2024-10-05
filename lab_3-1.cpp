@@ -8,32 +8,28 @@
 
 int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_index, int arr_size) 
 {
-    // adding min value of float type to the end of arr
-    int rest = arr.size() % 4;
-    if (rest != 0)
-    {
-        for (int i = 0; i < 4 - rest; ++i)
-        {
-            arr.push_back(std::numeric_limits<float>::min());
-        }
-    }
-
     // variable initialization
     max_value = arr[0];
     max_index = 0;
 
-    __m128 xmm_max_value = _mm_load_ps(&arr[0]);// load first 4 floats from arr
-    __m128i xmm_max_index = _mm_setzero_si128();// telling that max index is 0
+    __m128 xmm_max_value = _mm_loadu_ps(&arr[0]);// load first 4 floats from arr
+    //__m128i xmm_max_index = _mm_setzero_si128();
+    __m128i xmm_max_index = _mm_set_epi32(3, 2, 1, 0);// telling that first 4 elems are maximum
 
     for (int i = 4; i < arr_size; i += 4) 
     {
-        __m128 xmm_values = _mm_load_ps(&arr[i]);//load next 4 elements
+        __m128 xmm_values = _mm_loadu_ps(&arr[i]);//load next 4 elements
         __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);// loading 4 indexes
 
-        /* make mask comparing by every of four elements
-         compare 2 registers like if first[i] < second[i] then result[i] = 1 else 0 in bits
-         -> result casting to __m128i */
-        __m128i xmm_mask = _mm_castps_si128(_mm_cmpgt_ps(xmm_values, xmm_max_value));
+        /*
+        * xmm_values[i] > xmm_max_value ?
+        * if true than -nan (set bit)
+        * if false than 0 (bit not set)
+        */
+        __m128 cmp_res = _mm_cmpgt_ps(xmm_values, xmm_max_value);
+
+        //casting
+        __m128i xmm_mask = _mm_castps_si128(cmp_res);
 
         // from 2 registers getting new like new_register[i]=max(first[i], second[i])
         xmm_max_value = _mm_max_ps(xmm_values, xmm_max_value);
@@ -41,12 +37,12 @@ int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_
         xmm_max_index = _mm_blendv_epi8(xmm_max_index, xmm_indices, xmm_mask);
     }
 
-    // compare 0-1 and 2-3
+    // compare 0 with 2 and 1 with 3 (xmm_max_value[0123] and xmm_max_value[2301])
     __m128 max1 = _mm_max_ps(xmm_max_value, _mm_shuffle_ps(xmm_max_value, xmm_max_value, _MM_SHUFFLE(2, 3, 0, 1)));
-    // compare max values from the previous comparing
+    // compare max values from the previous comparing and xmm_max_value[1032]
     __m128 max2 = _mm_max_ps(max1, _mm_shuffle_ps(max1, max1, _MM_SHUFFLE(1, 0, 3, 2))); 
 
-    // getting max value
+    // getting first elem of max2 (maximum)
     _mm_store_ss(&max_value, max2);
 
     // getting index of max value from xmm_max_index
@@ -54,20 +50,20 @@ int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_
     int indexMask = _mm_movemask_ps(maxMask); // retrieving mask
     int index = -1;
 
-    if (indexMask) {
+    if (indexMask) 
+    {
         // max value in max1
         int idx = _tzcnt_u32(indexMask); // first bit
-        index = idx; // (0 and 1 indexes)
+        index = idx; // (0 or 1 indexes)
     }
-    else {
+    else 
+    {
         // max value in max2
         maxMask = _mm_cmpeq_ps(max2, _mm_set1_ps(max_value)); // max2 mask
         indexMask = _mm_movemask_ps(maxMask); // retrieving mask
 
-        if (indexMask) {
-            int idx = _tzcnt_u32(indexMask); // second bit
-            index = idx + 2; // because it is second bit (2 and 3 indexes)
-        }
+        int idx = _tzcnt_u32(indexMask); // second bit
+        index = idx + 2; // because it is second bit (2 or 3 indexes)
     }
 
     // now getting index of max elem; this index in xmm_max_index
