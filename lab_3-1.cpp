@@ -16,7 +16,7 @@ int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_
     //__m128i xmm_max_index = _mm_setzero_si128();
     __m128i xmm_max_index = _mm_set_epi32(3, 2, 1, 0);// telling that first 4 elems are maximum
 
-    for (int i = 4; i < arr_size; i += 4) 
+    for (int i = 4; i < (arr_size / 4) * 4; i += 4)
     {
         __m128 xmm_values = _mm_loadu_ps(&arr[i]);//load next 4 elements
         __m128i xmm_indices = _mm_set_epi32(i + 3, i + 2, i + 1, i);// loading 4 indexes
@@ -73,6 +73,16 @@ int find_max_value_and_index(std::vector<float> arr, float& max_value, int& max_
 
     // getting index from that saved array
     max_index = indicesArray[index];
+
+    //rest of arr
+    for (int j = (arr_size / 4) * 4; j < arr_size; ++j)
+    {
+        if (arr[j] > max_value)
+        {
+            max_value = arr[j];
+            max_index = j;
+        }
+    }
 
     return 0;
 }
